@@ -18,9 +18,11 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+    }
 
-        ndk {
-            abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a", "x86_64"))
+    sourceSets {
+        getByName("main") {
+            shaders.setSrcDirs(emptyList<String>())
         }
     }
 
@@ -117,9 +119,6 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
 
-    // Vulkan & Graphics Helpers
-    implementation("androidx.graphics:graphics-core:1.0.1")
-
     // Exif & Image decoding
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
@@ -129,3 +128,9 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }
+
+// Ensure shader compilation tasks are explicitly disabled (no NDK required)
+tasks.matching { it.name.contains("Shader") }.configureEach {
+    enabled = false
+}
+

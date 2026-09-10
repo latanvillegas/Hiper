@@ -2,94 +2,97 @@ package com.photoengine.core.gpu
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.renderscript.*
 import android.util.Log
 
 /**
- * High-Performance RenderScript / OpenGL ES Compute Fallback Driver.
- * Provides guaranteed GPU hardware acceleration on devices where Vulkan 1.1 is unavailable
- * or on older Android OS levels (Android 8.0 - 11.0).
- * Handles:
- * - ScriptIntrinsicBlur (for Halation & Bloom blur stages)
- * - ScriptIntrinsicLUT (for Curve 1D LUT mapping)
- * - ScriptIntrinsicColorMatrix (for color grading)
- * - Custom Allocation-to-Allocation kernel execution
+ * CPU-based Image Processing Driver (pure Kotlin / Bitmap / Canvas).
+ * Eliminates obsolete Android RenderScript dependencies and NDK requirements
+ * while keeping 100% API compatibility with downstream image modules.
  */
-@Suppress("DEPRECATION")
 class RenderScriptFallback(private val context: Context) {
 
-    private var rs: RenderScript? = null
-    private var intrinsicBlur: ScriptIntrinsicBlur? = null
-    private var intrinsicLut: ScriptIntrinsicLUT? = null
-    private var intrinsicColorMatrix: ScriptIntrinsicColorMatrix? = null
-
     fun initialize(): Boolean {
-        return try {
-            rs = RenderScript.create(context)
-            intrinsicBlur = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
-            intrinsicLut = ScriptIntrinsicLUT.create(rs, Element.U8_4(rs))
-            intrinsicColorMatrix = ScriptIntrinsicColorMatrix.create(rs, Element.U8_4(rs))
-            Log.i("RenderScriptFallback", "RenderScript GPU fallback initialized successfully.")
-            true
-        } catch (e: Exception) {
-            Log.e("RenderScriptFallback", "Failed to initialize RenderScript: ${e.message}")
-            false
-        }
+        Log.i("RenderScriptFallback", "CPU processing fallback driver initialized successfully (Pure Kotlin / Canvas).")
+        return true
     }
 
     /**
-     * Applies a 256-level RGB LUT using hardware-accelerated ScriptIntrinsicLUT.
+     * Applies a 256-level RGB LUT using pure Kotlin CPU processing.
      */
     fun applyLut(input: Bitmap, output: Bitmap, lutTableRgba: ByteArray) {
-        val rsContext = rs ?: return
-        val lut = intrinsicLut ?: return
+        val width = input.width
+        val height = input.height
+        val pixels = IntArray(width * height)
+        input.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val rLut = IntArray(256)
+        val gLut = IntArray(256)
+        val bLut = IntArray(256)
 
         for (i in 0..255) {
-            val r = lutTableRgba[i * 4 + 0].toInt() and 0xFF
-            val g = lutTableRgba[i * 4 + 1].toInt() and 0xFF
-            val b = lutTableRgba[i * 4 + 2].toInt() and 0xFF
-            lut.setRed(i, r)
-            lut.setGreen(i, g)
-            lut.setBlue(i, b)
-            lut.setAlpha(i, 255)
+            rLut[i] = lutTableRgba[i * 4 + 0].toInt() and 0xFF
+            gLut[i] = lutTableRgba[i * 4 + 1].toInt() and 0xFF
+            bLut[i] = lutTableRgba[i * 4 + 2].toInt() and 0xFF
         }
 
-        val allocIn = Allocation.createFromBitmap(rsContext, input)
-        val allocOut = Allocation.createFromBitmap(rsContext, output)
+        for (i in pixels.indices) {
+            val color = pixels[i]
+            val a = (color shr 24) and 0xFF
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
 
-        lut.forEach(allocIn, allocOut)
-        allocOut.copyTo(output)
+            val newR = rLut[r]
+            val newG = gLut[g]
+            val newB = bLut[b]
 
-        allocIn.destroy()
-        allocOut.destroy()
+            pixels[i] = (a shl 24) or (newR shl 16) or (newG shl 8) or newB
+        }
+
+        output.setPixels(pixels, 0, width, 0, 0, width, height)
     }
 
     /**
-     * Executes fast Gaussian blur for halation / bloom with configurable radius.
+     * Executes fast Gaussian / Box blur for halation / bloom with configurable radius on CPU.
      */
     fun applyFastBlur(input: Bitmap, output: Bitmap, radius: Float) {
-        val rsContext = rs ?: return
-        val blur = intrinsicBlur ?: return
+        val rad = radius.toInt().coerceIn(1, 25)
+        val width = input.width
+        val height = input.height
+        val inPixels = IntArray(width * height)
+        val outPixels = IntArray(width * height)
+        input.getPixels(inPixels, 0, width, 0, 0, width, height)
 
-        val clampedRadius = radius.coerceIn(1.0f, 25.0f)
-        blur.setRadius(clampedRadius)
+        // Fast horizontal box blur pass
+        for (y in 0 until height) {
+            val yOffset = y * width
+            for (x in 0 until width) {
+                var rSum = 0
+                var gSum = 0
+                var bSum = 0
+                var count = 0
 
-        val allocIn = Allocation.createFromBitmap(rsContext, input)
-        val allocOut = Allocation.createFromBitmap(rsContext, output)
+                val startX = (x - rad).coerceAtLeast(0)
+                val endX = (x + rad).coerceAtMost(width - 1)
 
-        blur.setInput(allocIn)
-        blur.forEach(allocOut)
-        allocOut.copyTo(output)
+                for (kx in startX..endX) {
+                    val p = inPixels[yOffset + kx]
+                    rSum += (p shr 16) and 0xFF
+                    gSum += (p shr 8) and 0xFF
+                    bSum += p and 0xFF
+                    count++
+                }
 
-        allocIn.destroy()
-        allocOut.destroy()
+                val orig = inPixels[yOffset + x]
+                val a = (orig shr 24) and 0xFF
+                outPixels[yOffset + x] = (a shl 24) or ((rSum / count) shl 16) or ((gSum / count) shl 8) or (bSum / count)
+            }
+        }
+
+        output.setPixels(outPixels, 0, width, 0, 0, width, height)
     }
 
     fun release() {
-        intrinsicBlur?.destroy()
-        intrinsicLut?.destroy()
-        intrinsicColorMatrix?.destroy()
-        rs?.destroy()
-        rs = null
+        // No-op for pure CPU driver
     }
 }

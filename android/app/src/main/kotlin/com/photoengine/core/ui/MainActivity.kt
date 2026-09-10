@@ -47,7 +47,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var galleryManager: GalleryIntegrationManager
     private var sourceIntent: Intent? = null
     private var currentImageUri by mutableStateOf<Uri?>(null)
+    private var originalBitmap by mutableStateOf<Bitmap?>(null)
     private var currentBitmap by mutableStateOf<Bitmap?>(null)
+    private var brightness by mutableFloatStateOf(0f)
+    private var contrast by mutableFloatStateOf(1f)
+    private var rotationDegrees by mutableFloatStateOf(0f)
     private var isLoading by mutableStateOf(false)
     private var errorMessage by mutableStateOf<String?>(null)
     private var isFromGalleryEditor by mutableStateOf(false)
@@ -130,7 +134,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             when (val result = galleryManager.loadMaxResolutionImage(uri)) {
                 is GalleryIntegrationManager.LoadResult.Success -> {
+                    originalBitmap = result.bitmap
                     currentBitmap = result.bitmap
+                    brightness = 0f
+                    contrast = 1f
+                    rotationDegrees = 0f
                     currentImageUri = result.sourceUri
                     imageMetadata = "${result.originalWidth} × ${result.originalHeight} px • ${result.mimeType}"
                     isLoading = false
@@ -157,6 +165,44 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Pure CPU image processing using Android Bitmap, Canvas, and ColorMatrix.
+     * Guaranteed 100% NDK-free and RenderScript-free.
+     */
+    private fun applyCpuAdjustments(newBrightness: Float, newContrast: Float, newRotation: Float) {
+        val src = originalBitmap ?: return
+        brightness = newBrightness
+        contrast = newContrast
+        rotationDegrees = newRotation
+
+        val colorMatrix = android.graphics.ColorMatrix(
+            floatArrayOf(
+                contrast, 0f, 0f, 0f, brightness,
+                0f, contrast, 0f, 0f, brightness,
+                0f, 0f, contrast, 0f, brightness,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+        val paint = android.graphics.Paint().apply {
+            colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+        }
+
+        val rot = ((rotationDegrees % 360) + 360) % 360
+        val isSwapped = rot == 90f || rot == 270f
+        val outW = if (isSwapped) src.height else src.width
+        val outH = if (isSwapped) src.width else src.height
+
+        val result = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(result)
+        val matrix = android.graphics.Matrix().apply {
+            postTranslate(-src.width / 2f, -src.height / 2f)
+            postRotate(rot)
+            postTranslate(outW / 2f, outH / 2f)
+        }
+        canvas.drawBitmap(src, matrix, paint)
+        currentBitmap = result
     }
 
     /**
@@ -402,6 +448,70 @@ class MainActivity : ComponentActivity() {
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium
                                         )
+                                    }
+                                }
+                            }
+
+                            // CPU Basic Adjustments (Brightness, Contrast, Rotate 90°)
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color(0xFF0F172A)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Brillo: ${brightness.toInt()}", color = Color.White, fontSize = 12.sp, modifier = Modifier.width(70.dp))
+                                        Slider(
+                                            value = brightness,
+                                            onValueChange = { applyCpuAdjustments(it, contrast, rotationDegrees) },
+                                            valueRange = -100f..100f,
+                                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Contraste: ${"%.1f".format(contrast)}x", color = Color.White, fontSize = 12.sp, modifier = Modifier.width(70.dp))
+                                        Slider(
+                                            value = contrast,
+                                            onValueChange = { applyCpuAdjustments(brightness, it, rotationDegrees) },
+                                            valueRange = 0.5f..2.0f,
+                                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        FilledTonalButton(
+                                            onClick = { applyCpuAdjustments(brightness, contrast, rotationDegrees + 90f) },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Default.RotateRight, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Girar 90°", fontSize = 12.sp)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { applyCpuAdjustments(0f, 1f, 0f) },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Restablecer", fontSize = 12.sp, color = Color.White)
+                                        }
                                     }
                                 }
                             }

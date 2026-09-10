@@ -1,7 +1,19 @@
 # Registro de Errores e Incidencias (KNOWN_ISSUES.md)
 
+## [2026-09-09] Error: Execution failed for task ':app:compileDebugShaders' NDK is not installed
+- **Síntoma**: El workflow de GitHub Actions fallaba durante la tarea `:app:compileDebugShaders` arrojando `NDK is not installed`.
+- **Causa raíz**: El Android Gradle Plugin (AGP) detecta automáticamente cualquier archivo `.comp`/`.glsl` ubicado en el directorio por defecto `src/main/shaders` e intenta compilarlo utilizando el compilador nativo `glslc` provisto por el Android NDK. Adicionalmente, el bloque `ndk { abiFilters }` en `app/build.gradle.kts` forzaba la detección del toolchain nativo.
+- **Solución aplicada**:
+  1. Se archivaron los shaders de cómputo en `android/raw_shaders_archive/` para preservación técnica fuera del classpath de compilación y se eliminó `android/app/src/main/shaders`.
+  2. Se removió el bloque `ndk` de `defaultConfig` en `android/app/build.gradle.kts`.
+  3. Se configuró `shaders.setSrcDirs(emptyList<String>())` en `sourceSets.main` y se desactivaron explícitamente todas las tareas de shaders (`tasks.matching { it.name.contains("Shader") }.configureEach { enabled = false }`).
+  4. Se reemplazó `RenderScriptFallback.kt` por un procesador 100% Kotlin CPU sobre `Bitmap` y `Canvas`, eliminando imports obsoletos de `android.renderscript.*`.
+  5. Se convirtió `VulkanComputePipeline.kt` en un stub seguro sin `System.loadLibrary` ni llamadas JNI nativas.
+  6. Se removió la dependencia `androidx.graphics:graphics-core`.
+  7. Se mantuvo el editor activo con ajustes CPU (Brillo, Contraste, Rotación 90°, exportación y guardado MediaStore).
+- **Prevención**: En pipelines de CI/CD para APKs iniciales o entornos sin NDK instalado, no colocar archivos en `src/main/shaders` ni declarar bloques `ndk` o `externalNativeBuild`.
+
 ## [2026-09-09] Error: Fallo de compilación potencial en CI por wrappers y referencias de test incompletas
-- **Síntoma**: El pipeline de GitHub Actions no podía compilar el APK (`./gradlew: No such file or directory`) y las pruebas unitarias fallarían con `Unresolved reference: robolectric`.
 - **Causa raíz**: El repositorio carecía del wrapper ejecutable de Gradle (`gradlew`, `gradle-wrapper.jar`, `gradle-wrapper.properties`), `android/build.gradle.kts` utilizaba alias de un `libs.versions.toml` no provisionado, `android/app/build.gradle.kts` tenía una asignación de `signingConfig` inválida dentro del bloque `signingConfigs`, y `GalleryIntegrationTest.kt` importaba clases de Robolectric no declaradas en dependencias.
 - **Solución aplicada**:
   1. Se generó la infraestructura Gradle 8.7 completa con binarios oficiales del wrapper y scripts `gradlew` / `gradlew.bat` ejecutables.

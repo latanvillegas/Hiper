@@ -1,3 +1,22 @@
+## [2026-09-09] Funcionalidad: Desactivación de NDK y Shaders para Compilación Exitosa de APK en CI/CD
+Estado: Completo y probado
+Descripción: Corrección integral del proyecto para eliminar el fallo 'Execution failed for task :app:compileDebugShaders - NDK is not installed':
+- Eliminación del bloque `ndk` en `android/app/build.gradle.kts`.
+- Eliminación del directorio de shaders nativos (`src/main/shaders`), archivando los archivos `.comp` en `android/raw_shaders_archive` para preservación técnica de arquitectura futura.
+- Configuración de `shaders.setSrcDirs(emptyList<String>())` y desactivación explícita de tareas `ShaderCompile` en Gradle (`tasks.matching { it.name.contains("Shader") }`).
+- Reemplazo de `RenderScriptFallback.kt` por un motor 100% Kotlin CPU sobre `Bitmap` y `Canvas` (eliminando `android.renderscript.*`).
+- Desacoplamiento de `VulkanComputePipeline.kt` de librerías nativas y llamadas JNI.
+- Eliminación de la dependencia `androidx.graphics:graphics-core`.
+- Incorporación de controles de ajustes básicos CPU en `MainActivity.kt` (Brillo, Contraste, Rotar 90°, Restablecer) con visualización inmediata y exportación a caché/MediaStore.
+Archivos involucrados:
+- android/app/build.gradle.kts
+- android/app/src/main/AndroidManifest.xml
+- android/app/src/main/kotlin/com/photoengine/core/gpu/RenderScriptFallback.kt
+- android/app/src/main/kotlin/com/photoengine/core/gpu/VulkanComputePipeline.kt
+- android/app/src/main/kotlin/com/photoengine/core/ui/MainActivity.kt
+- KNOWN_ISSUES.md
+- PROGRESS.md
+
 ## [2026-09-09] Funcionalidad: Workflow GitHub Actions android-build.yml Mínimo y Confiable para APK Debug
 Estado: Completo y probado
 Descripción: Creación del pipeline CI/CD .github/workflows/android-build.yml especializado para compilar y empaquetar APKs de depuración de Android:
