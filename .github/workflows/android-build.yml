@@ -1,0 +1,62 @@
+name: Android Build Debug APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew android/gradlew
+
+      - name: Check Gradle version
+        run: ./gradlew --version
+
+      - name: Compile Debug APK
+        run: ./gradlew clean assembleDebug --stacktrace --no-daemon
+
+      - name: Search and verify generated APK
+        run: |
+          echo "=== Busqueda de archivos APK generados ==="
+          APKS=$(find . -type f -path "*/build/outputs/apk/debug/*.apk")
+          if [ -n "$APKS" ]; then
+            echo "Archivos APK generados exitosamente:"
+            ls -lh $APKS
+          else
+            echo "::error::No se encontro ningun archivo APK generado en **/build/outputs/apk/debug/"
+            echo "=== Diagnostico de directorios build ==="
+            BUILD_DIRS=$(find . -type d -name "build")
+            if [ -z "$BUILD_DIRS" ]; then
+              echo "No se encontraron directorios 'build' en el proyecto."
+            else
+              for b_dir in $BUILD_DIRS; do
+                echo "--- Contenido de $b_dir ---"
+                ls -laR "$b_dir" 2>/dev/null || true
+              done
+            fi
+            exit 1
+          fi
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: '**/build/outputs/apk/debug/*.apk'
+          if-no-files-found: error
+          retention-days: 30

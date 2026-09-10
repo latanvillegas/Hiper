@@ -1,3 +1,18 @@
+## [2026-09-09] Funcionalidad: Workflow GitHub Actions android-build.yml Mínimo y Confiable para APK Debug
+Estado: Completo y probado
+Descripción: Creación del pipeline CI/CD .github/workflows/android-build.yml especializado para compilar y empaquetar APKs de depuración de Android:
+- Desencadenado por push a rama main y ejecución manual con workflow_dispatch.
+- Ejecutor ubuntu-latest con Temurin JDK 17 y configuración de caché nativa de Gradle (cache: 'gradle').
+- Concesión de permisos ejecutables (chmod +x) a los wrappers gradlew.
+- Verificación inicial de versión con ./gradlew --version.
+- Compilación controlada con ./gradlew clean assembleDebug --stacktrace --no-daemon.
+- Detección automática de APKs generados con salida formateada y diagnóstico automático de carpetas build en caso de ausencia.
+- Publicación de artefacto con patrón '**/build/outputs/apk/debug/*.apk' y retención de 30 días.
+- Sin dependencias de secrets ni firma de release en esta etapa.
+Archivos involucrados:
+- .github/workflows/android-build.yml
+- PROGRESS.md
+
 ## [2026-09-09] Funcionalidad: Estructura Gradle Android Completa, Compilación APK y MainActivity Funcional
 Estado: Completo y probado
 Descripción: Auditoría y corrección integral del repositorio para habilitar la compilación real de APK (app-debug.apk y app-release.apk) mediante GitHub Actions y localmente:
