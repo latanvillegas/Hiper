@@ -17,11 +17,11 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@android:drawable/ic_menu_camera"
-        android:label="PhotoEngine Pro"
-        android:roundIcon="@android:drawable/ic_menu_camera"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:theme="@style/Theme.PhotoEnginePro"
         android:hardwareAccelerated="true"
         android:requestLegacyExternalStorage="false">
 
@@ -29,7 +29,7 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:theme="@style/Theme.PhotoEnginePro"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             
             <!-- Standard App Launcher -->

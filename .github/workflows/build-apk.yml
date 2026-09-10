@@ -140,7 +140,7 @@ jobs:
           echo "KEYSTORE_PROVISIONED=true" >> $GITHUB_ENV
           echo "KEYSTORE_FILE=$(pwd)/android/app/keystore/release.keystore" >> $GITHUB_ENV
 
-      - name: Build Release APK & App Bundle (AAB)
+      - name: Build Debug & Release APK & App Bundle (AAB)
         working-directory: ./android
         env:
           KEYSTORE_FILE: ${{ env.KEYSTORE_FILE }}
@@ -148,7 +148,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew clean assembleRelease bundleRelease --stacktrace
+          ./gradlew clean assembleDebug assembleRelease bundleRelease --stacktrace
 
       - name: Shred & Clean Temporary Keystore
         if: always()
@@ -156,6 +156,13 @@ jobs:
           if [ -f "android/app/keystore/release.keystore" ]; then
             shred -u android/app/keystore/release.keystore || rm -f android/app/keystore/release.keystore
           fi
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4

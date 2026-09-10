@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.photoengine.core"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.photoengine.core"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
 
@@ -21,13 +21,6 @@ android {
 
         ndk {
             abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a", "x86_64"))
-        }
-
-        externalNativeBuild {
-            cmake {
-                cppFlags("-std=c++17 -O3 -fvisibility=hidden")
-                arguments("-DANDROID_STL=c++_shared")
-            }
         }
     }
 
@@ -43,26 +36,28 @@ android {
                 storePassword = keystorePassword
                 this.keyAlias = keyAlias
                 this.keyPassword = keyPassword
-            } else {
-                // Safe fallback to debug signature if release keystore is not provisioned
-                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning != null && releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
+                signingConfig = releaseSigning
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
         debug {
             isMinifyEnabled = false
             isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -81,7 +76,6 @@ android {
 
     buildFeatures {
         compose = true
-        renderscript = true
     }
 
     composeOptions {

@@ -6,9 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import org.junit.Assert.*
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 /**
  * Unit tests verifying Native Gallery Intent resolution, Scoped Storage compatibility,

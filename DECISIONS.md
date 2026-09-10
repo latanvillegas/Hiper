@@ -1,5 +1,15 @@
 # Registro de Decisiones Técnicas (DECISIONS.md)
 
+## [2026-09-09] Decisión 11: Estandarización de Infraestructura Gradle Android para Compilación Real en CI/CD
+- **Contexto**: El repositorio contenía lógica Kotlin de alta fidelidad pero carecía de la envoltura estándar de Gradle (gradlew, gradle-wrapper.jar, gradle.properties), lo que impedía que GitHub Actions o un desarrollador compilaran `app-debug.apk` y `app-release.apk`.
+- **Decisión**:
+  1. Proveer infraestructura Gradle 8.7 completa con binarios oficiales del wrapper (`gradle-wrapper.jar` v8.7.0) y scripts ejecutables tanto en `android/` como delegadores en la raíz del repositorio.
+  2. Alinear la matriz de compatibilidad a versiones estables y probadas en producción: Gradle 8.7 + AGP 8.5.2 + Kotlin 1.9.24 + Java 17 + Compose Compiler Extension 1.5.14 + compileSdk 34 + targetSdk 34.
+  3. Configurar firma de release resiliente: si el secret de producción no está provisto en GitHub Actions o localmente, el build type release utiliza automáticamente la firma de debug sin abortar la compilación.
+  4. Generar todos los recursos Android nativos necesarios (strings, themes, vector drawables y mipmaps adaptativos) para eliminar advertencias y errores de empaquetado de recursos de AAPT2.
+  5. Asegurar en `MainActivity` el flujo requerido: Android Photo Picker nativo (`PickVisualMedia`), recepción de intents de galería (`ACTION_VIEW`, `ACTION_EDIT`), vista previa reactiva en Compose, botón de exportación y guardado Scoped Storage en MediaStore.
+- **Consecuencia**: Compilación garantizada y determinista de `app-debug.apk` y `app-release.apk` en GitHub Actions (`ubuntu-latest` con JDK 17) y en cualquier máquina local con comandos directos `./gradlew assembleDebug` y `./gradlew assembleRelease`.
+
 ## [2026-09-09] Decisión 10: Suite Photoshop 2026 Modular con Pipeline de Capas y Espacios de Color
 - **Contexto**: Se requiere implementar la totalidad de las funciones avanzadas nivel Photoshop en Android con Kotlin: sistema de capas ilimitadas con 25 modos de fusión, capas de ajuste no destructivas, máscaras de capa y recorte, selección matricial (Lazo magnético, Magic Wand, Color Range), transformaciones afines y homografía proyectiva, dibujo profesional con dinámicas de pincel y degradados, tipografía vectorial con 11 deformaciones Warp Text, galería de filtros y Camera Raw, ajustes de imagen y LUTs 3D, herramientas de retoque/clonación, gestión de perfiles de color (sRGB, Adobe RGB, ProPhoto, Display P3) con soft proofing, y gestión de metadatos EXIF/IPTC/XMP.
 - **Decisión**:

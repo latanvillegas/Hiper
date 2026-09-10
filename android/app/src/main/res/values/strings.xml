@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PhotoEngine Pro</string>
+    <string name="action_open_photo">Abrir Foto</string>
+    <string name="action_export">Exportar</string>
+    <string name="action_save_copy">Guardar Copia en Galería</string>
+    <string name="status_ready">Listo para editar</string>
+    <string name="status_loading">Cargando imagen...</string>
+    <string name="status_saving">Guardando copia en el dispositivo...</string>
+    <string name="msg_saved_success">Imagen guardada exitosamente en Galería</string>
+    <string name="msg_save_error">Error al guardar la imagen</string>
+</resources>

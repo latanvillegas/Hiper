@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,16 +29,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.photoengine.core.color.HistogramData
 import com.photoengine.core.gallery.GalleryAnalyticsLogger
 import com.photoengine.core.gallery.GalleryIntegrationManager
-import com.photoengine.core.gallery.PermissionsHelper
 import kotlinx.coroutines.launch
 
 /**
- * MainActivity supporting Native Android Gallery Integration.
- * Acts as the default editor target for Google Photos, Samsung Gallery,
- * Xiaomi Gallery, OnePlus Gallery, and Motorola Gallery via ACTION_EDIT.
+ * MainActivity supporting Native Android Gallery Integration and Photo Picker.
+ * Handles:
+ * - Standalone App launch with modern Android Photo Picker
+ * - System-wide ACTION_VIEW, ACTION_EDIT, and ACTION_SEND for image/*
+ * - Preview of the selected image
+ * - Export button (returns result to calling app or shares)
+ * - Save copy to MediaStore (Pictures/PhotoEngine) via Scoped Storage
  */
 class MainActivity : ComponentActivity() {
 
@@ -50,32 +53,21 @@ class MainActivity : ComponentActivity() {
     private var isFromGalleryEditor by mutableStateOf(false)
     private var imageMetadata by mutableStateOf<String?>(null)
 
-    // Modern photo picker contract for standalone app launcher mode
+    // Modern Android Photo Picker (Backported to Android 4.4+ via Play Services, native in Android 13+)
     private val photoPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
             loadImageFromUri(uri)
         }
     }
 
-    // Modern runtime permissions launcher for Android 13+ (READ_MEDIA_IMAGES) and legacy storage
-    private val permissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val anyGranted = permissions.values.any { it }
-        GalleryAnalyticsLogger.logError(
-            GalleryAnalyticsLogger.EventType.PERMISSION_STATUS_CHANGED,
-            "Permissions result: $permissions"
-        )
-        if (anyGranted) {
-            photoPickerLauncher.launch("image/*")
-        } else {
-            Toast.makeText(
-                this,
-                "Se requieren permisos para explorar las fotos locales del dispositivo.",
-                Toast.LENGTH_LONG
-            ).show()
+    // Fallback file picker contract
+    private val getContentLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            loadImageFromUri(uri)
         }
     }
 
@@ -105,7 +97,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Parses the incoming intent from Samsung Gallery, Google Photos, Xiaomi, etc.
+     * Parses incoming intent from Google Photos, Samsung Gallery, Xiaomi, etc.
      */
     private fun handleIncomingIntent(intent: Intent?) {
         sourceIntent = intent
@@ -130,7 +122,6 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Loads the target image in maximum available resolution.
-     * ContentResolver reads directly via Intent grant (no storage permissions needed for Intent URIs).
      */
     private fun loadImageFromUri(uri: Uri) {
         isLoading = true
@@ -141,7 +132,7 @@ class MainActivity : ComponentActivity() {
                 is GalleryIntegrationManager.LoadResult.Success -> {
                     currentBitmap = result.bitmap
                     currentImageUri = result.sourceUri
-                    imageMetadata = "${result.originalWidth} x ${result.originalHeight} px • ${result.mimeType}"
+                    imageMetadata = "${result.originalWidth} × ${result.originalHeight} px • ${result.mimeType}"
                     isLoading = false
                 }
                 is GalleryIntegrationManager.LoadResult.Failure.ImageDeleted -> {
@@ -169,12 +160,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Saves the edited image to temporary cache and returns RESULT_OK to the calling gallery.
+     * Saves the edited image to temporary cache and delivers result back to calling gallery.
      */
-    private fun saveAndReturnToGallery() {
+    private fun exportImage() {
         val bitmap = currentBitmap
         if (bitmap == null) {
-            Toast.makeText(this, "No hay imagen para guardar", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No hay imagen para exportar", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -190,14 +181,26 @@ class MainActivity : ComponentActivity() {
                     exportResult.durationMs
                 )
 
-                setResult(Activity.RESULT_OK, resultIntent)
-                finish()
+                if (isFromGalleryEditor && sourceIntent != null) {
+                    setResult(Activity.RESULT_OK, resultIntent)
+                    Toast.makeText(this@MainActivity, "Imagen exportada y devuelta a la galería", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    // Standalone mode: launch share intent
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = exportResult.mimeType
+                        putExtra(Intent.EXTRA_STREAM, exportResult.contentUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(Intent.createChooser(shareIntent, "Exportar imagen"))
+                    isLoading = false
+                }
             } catch (e: Exception) {
                 isLoading = false
-                errorMessage = "Error al guardar el resultado: ${e.localizedMessage}"
+                errorMessage = "Error al exportar la imagen: ${e.localizedMessage}"
                 GalleryAnalyticsLogger.logError(
                     GalleryAnalyticsLogger.EventType.IMAGE_EXPORT_ERROR,
-                    "Failed to return result to caller gallery",
+                    "Failed to export image",
                     e
                 )
             }
@@ -205,9 +208,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Optional: saves a permanent copy directly into Scoped Storage (Pictures/PhotoEngine).
+     * Saves a permanent copy directly into Scoped Storage (Pictures/PhotoEngine).
      */
-    private fun saveToDeviceLibrary() {
+    private fun saveToMediaStoreLibrary() {
         val bitmap = currentBitmap ?: return
         isLoading = true
         lifecycleScope.launch {
@@ -216,13 +219,13 @@ class MainActivity : ComponentActivity() {
             if (savedUri != null) {
                 Toast.makeText(
                     this@MainActivity,
-                    "Guardado en Galería (Pictures/PhotoEngine)",
-                    Toast.LENGTH_SHORT
+                    "Copia guardada en Galería (Pictures/PhotoEngine)",
+                    Toast.LENGTH_LONG
                 ).show()
             } else {
                 Toast.makeText(
                     this@MainActivity,
-                    "Error al guardar en el almacenamiento del dispositivo",
+                    "Error al guardar copia en MediaStore",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -235,9 +238,14 @@ class MainActivity : ComponentActivity() {
         finish()
     }
 
-    private fun requestLocalPhotosBrowse() {
-        val requiredPermissions = PermissionsHelper.getRequiredMediaPermissions()
-        permissionsLauncher.launch(requiredPermissions)
+    private fun launchPhotoPicker() {
+        try {
+            photoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (_: Exception) {
+            getContentLauncher.launch("image/*")
+        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -273,20 +281,20 @@ class MainActivity : ComponentActivity() {
                     },
                     actions = {
                         if (currentBitmap != null) {
-                            // Save to Scoped Storage (device library)
-                            IconButton(onClick = { saveToDeviceLibrary() }) {
-                                Icon(Icons.Default.Save, contentDescription = "Guardar en Dispositivo", tint = Color(0xFF38BDF8))
+                            // Save copy to MediaStore (Pictures/PhotoEngine)
+                            IconButton(onClick = { saveToMediaStoreLibrary() }) {
+                                Icon(Icons.Default.Save, contentDescription = "Guardar en MediaStore", tint = Color(0xFF38BDF8))
                             }
 
-                            // Done / Return to Caller Gallery (Google Photos, Samsung, etc.)
+                            // Export button
                             Button(
-                                onClick = { saveAndReturnToGallery() },
+                                onClick = { exportImage() },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
                                 modifier = Modifier.padding(end = 8.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Listo", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Exportar", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -309,7 +317,7 @@ class MainActivity : ComponentActivity() {
                             CircularProgressIndicator(color = Color(0xFF38BDF8))
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Cargando imagen en máxima resolución...",
+                                "Procesando imagen...",
                                 color = Color.White,
                                 fontSize = 14.sp
                             )
@@ -332,7 +340,7 @@ class MainActivity : ComponentActivity() {
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Aviso de Integración",
+                                text = "Aviso del Editor",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -350,7 +358,7 @@ class MainActivity : ComponentActivity() {
                                     Text("Cerrar", color = Color.White)
                                 }
                                 Button(
-                                    onClick = { requestLocalPhotosBrowse() },
+                                    onClick = { launchPhotoPicker() },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
                                 ) {
                                     Text("Seleccionar otra foto")
@@ -372,13 +380,13 @@ class MainActivity : ComponentActivity() {
                                 currentBitmap?.let { bmp ->
                                     Image(
                                         bitmap = bmp.asImageBitmap(),
-                                        contentDescription = "Foto editada",
+                                        contentDescription = "Vista previa de la imagen",
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Fit
                                     )
                                 }
 
-                                // Native Gallery integration badge overlay
+                                // Status badge
                                 if (isFromGalleryEditor) {
                                     Box(
                                         modifier = Modifier
@@ -389,7 +397,7 @@ class MainActivity : ComponentActivity() {
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(
-                                            text = "✓ Conectado a Galería Externa (Sin permisos de disco)",
+                                            text = "✓ Conectado a Galería Externa",
                                             color = Color(0xFF4ADE80),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium
@@ -398,7 +406,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // Quick adjustment bar or tool launcher
+                            // Bottom actions bar
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 color = Color(0xFF1E293B)
@@ -410,16 +418,32 @@ class MainActivity : ComponentActivity() {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "Listo para aplicar filtros de curvas, HSL y Face Mesh",
-                                        color = Color(0xFF94A3B8),
-                                        fontSize = 12.sp
-                                    )
-                                    Button(
-                                        onClick = { saveAndReturnToGallery() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                                    OutlinedButton(
+                                        onClick = { launchPhotoPicker() }
                                     ) {
-                                        Text("Devolver a Galería", fontSize = 12.sp)
+                                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Cambiar Foto", fontSize = 12.sp, color = Color.White)
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = { saveToMediaStoreLibrary() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1))
+                                        ) {
+                                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Guardar en MediaStore", fontSize = 12.sp)
+                                        }
+
+                                        Button(
+                                            onClick = { exportImage() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                                        ) {
+                                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Exportar", fontSize = 12.sp)
+                                        }
                                     }
                                 }
                             }
@@ -427,7 +451,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     else -> {
-                        // Empty state when opened from app launcher
+                        // Empty state: Modern Photo Picker Entry
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -444,25 +468,26 @@ class MainActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 "PhotoEngine Pro",
-                                fontSize = 20.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Abre cualquier foto desde Google Fotos, Samsung Gallery, Xiaomi o pulsa aquí para editar.",
+                                "Selecciona una fotografía para comenzar a editar o compártela desde cualquier galería.",
                                 color = Color(0xFF94A3B8),
                                 textAlign = TextAlign.Center,
-                                fontSize = 13.sp
+                                fontSize = 14.sp
                             )
                             Spacer(modifier = Modifier.height(24.dp))
                             Button(
-                                onClick = { requestLocalPhotosBrowse() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                                onClick = { launchPhotoPicker() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                modifier = Modifier.height(48.dp)
                             ) {
-                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Abrir Foto del Dispositivo")
+                                Text("Seleccionar Imagen (Photo Picker)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }

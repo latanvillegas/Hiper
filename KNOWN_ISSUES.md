@@ -1,5 +1,16 @@
 # Registro de Errores e Incidencias (KNOWN_ISSUES.md)
 
+## [2026-09-09] Error: Fallo de compilación potencial en CI por wrappers y referencias de test incompletas
+- **Síntoma**: El pipeline de GitHub Actions no podía compilar el APK (`./gradlew: No such file or directory`) y las pruebas unitarias fallarían con `Unresolved reference: robolectric`.
+- **Causa raíz**: El repositorio carecía del wrapper ejecutable de Gradle (`gradlew`, `gradle-wrapper.jar`, `gradle-wrapper.properties`), `android/build.gradle.kts` utilizaba alias de un `libs.versions.toml` no provisionado, `android/app/build.gradle.kts` tenía una asignación de `signingConfig` inválida dentro del bloque `signingConfigs`, y `GalleryIntegrationTest.kt` importaba clases de Robolectric no declaradas en dependencias.
+- **Solución aplicada**:
+  1. Se generó la infraestructura Gradle 8.7 completa con binarios oficiales del wrapper y scripts `gradlew` / `gradlew.bat` ejecutables.
+  2. Se configuraron plugins explícitos con versiones compatibles en `android/build.gradle.kts` (AGP 8.5.2, Kotlin 1.9.24).
+  3. Se corrigió `android/app/build.gradle.kts` fijando `compileSdk = 34`, `targetSdk = 34` y una resolución condicional segura de firma para release con fallback a debug.
+  4. Se depuraron los imports huérfanos de Robolectric en `GalleryIntegrationTest.kt`.
+  5. Se crearon los recursos nativos de Android (strings, colors, themes, adaptive icons) requeridos por AAPT2.
+- **Prevención**: Ejecutar siempre una revisión de símbolos e imports antes de finalizar cambios y auditar la existencia de todos los archivos del wrapper de Gradle requeridos por CI.
+
 ## [2026-09-09] Error: SecurityException al devolver resultado a galerías de terceros (Samsung OneUI / Xiaomi)
 - **Síntoma**: Al presionar "Listo / Guardar", la galería llamadora (ej. Samsung Gallery o MIUI) no podía leer el URI devuelto y arrojaba `java.lang.SecurityException: Permission Denial: reading com.photoengine.core.fileprovider...`.
 - **Causa raíz**: El intent de resultado (`resultIntent`) solo tenía `FLAG_GRANT_READ_URI_PERMISSION` en flags del Intent, pero algunas versiones de Android requieren que el URI esté explícitamente en el `ClipData` del Intent para que el Binder IPC transfiera la concesión de permisos al proceso llamador.

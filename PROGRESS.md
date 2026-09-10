@@ -1,3 +1,59 @@
+## [2026-09-09] Funcionalidad: Estructura Gradle Android Completa, Compilación APK y MainActivity Funcional
+Estado: Completo y probado
+Descripción: Auditoría y corrección integral del repositorio para habilitar la compilación real de APK (app-debug.apk y app-release.apk) mediante GitHub Actions y localmente:
+1. INFRAESTRUCTURA GRADLE:
+   - Creación de android/gradlew y gradlew raíz ejecutables (chmod +x)
+   - Creación de android/gradlew.bat y gradlew.bat
+   - Descarga del binario oficial gradle/wrapper/gradle-wrapper.jar (v8.7.0)
+   - Configuración de gradle/wrapper/gradle-wrapper.properties apuntando a Gradle 8.7
+   - Configuración de android/gradle.properties (JVM 2GB, AndroidX, nonTransitiveRClass, parallel, caching)
+   - Configuración de android/settings.gradle.kts y android/build.gradle.kts con AGP 8.5.2 y Kotlin 1.9.24
+   - Ajuste de android/app/build.gradle.kts con compileSdk 34, targetSdk 34, minSdk 26, Jetpack Compose Compiler Extension 1.5.14, signingConfigs resiliente (fallback seguro a debug)
+2. RECURSOS Y MANIFEST:
+   - Creación de android/app/src/main/res/values/strings.xml con app_name y etiquetas de interfaz
+   - Creación de android/app/src/main/res/values/colors.xml y themes.xml (@style/Theme.PhotoEnginePro)
+   - Creación de drawables vectoriales y mipmaps adaptativos (ic_launcher e ic_launcher_round)
+   - Corrección de AndroidManifest.xml asociando recursos de tema e iconos
+3. MAINACTIVITY Y EDITOR INICIAL:
+   - MainActivity con Jetpack Compose y Material 3
+   - Selector de imagen moderno mediante Photo Picker (ActivityResultContracts.PickVisualMedia) y fallback a GetContent
+   - Recepción completa de ACTION_VIEW, ACTION_EDIT y ACTION_SEND para image/* desde cualquier galería del sistema
+   - Vista previa responsiva en alta resolución
+   - Botón de exportación con entrega de RESULT_OK a galería de origen o compartir sistema
+   - Guardado de copia permanente en MediaStore (Pictures/PhotoEngine) con Scoped Storage
+4. CI/CD GITHUB ACTIONS:
+   - Actualización de .github/workflows/build-apk.yml para compilar explícitamente assembleDebug y assembleRelease
+   - Upload de artefacto app-debug.apk y app-release.apk
+   - Eliminación de imports inexistentes en pruebas unitarias (GalleryIntegrationTest.kt)
+5. DOCUMENTACIÓN:
+   - Creación de README.md con instrucciones exactas para ./gradlew assembleDebug y ./gradlew assembleRelease
+Archivos involucrados:
+- android/gradlew
+- android/gradlew.bat
+- android/gradle/wrapper/gradle-wrapper.properties
+- android/gradle/wrapper/gradle-wrapper.jar
+- android/gradle.properties
+- android/build.gradle.kts
+- android/settings.gradle.kts
+- android/app/build.gradle.kts
+- android/app/src/main/AndroidManifest.xml
+- android/app/src/main/res/values/strings.xml
+- android/app/src/main/res/values/colors.xml
+- android/app/src/main/res/values/themes.xml
+- android/app/src/main/res/drawable/ic_launcher_background.xml
+- android/app/src/main/res/drawable/ic_launcher_foreground.xml
+- android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+- android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+- android/app/src/main/kotlin/com/photoengine/core/ui/MainActivity.kt
+- android/app/src/test/kotlin/com/photoengine/core/gallery/GalleryIntegrationTest.kt
+- .github/workflows/build-apk.yml
+- gradlew
+- gradlew.bat
+- README.md
+- PROGRESS.md
+- DECISIONS.md
+- KNOWN_ISSUES.md
+
 ## [2026-09-09] Funcionalidad: Suite Completa de Funciones Nivel Photoshop para Android en Kotlin
 Estado: Completo y probado
 Descripción: Implementación de la suite integral de herramientas profesionales de Photoshop en arquitectura modular Kotlin nativa:
