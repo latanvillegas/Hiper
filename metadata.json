@@ -1,0 +1,6 @@
+{
+  "name": "Android Pro Image Processing Engine",
+  "description": "Motor profesional de procesamiento de imágenes para Android en Kotlin con aceleración GPU (Vulkan/RenderScript), ML Kit AI masks, curvas RGB de 14 puntos, HSL de 8 canales, Face Mesh y retoque de retrato en tiempo real a 30 FPS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,31 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, rgba8) uniform readonly image2D uInputImage;
+
+// Atomic histogram SSBO buffer (4 * 256 bins: R, G, B, Luma)
+layout(std430, binding = 1) buffer HistogramBuffer {
+    uint rBins[256];
+    uint gBins[256];
+    uint bBins[256];
+    uint lumaBins[256];
+};
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uInputImage);
+
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec4 color = imageLoad(uInputImage, coord);
+
+    uint rIdx = uint(clamp(color.r * 255.0, 0.0, 255.0));
+    uint gIdx = uint(clamp(color.g * 255.0, 0.0, 255.0));
+    uint bIdx = uint(clamp(color.b * 255.0, 0.0, 255.0));
+    uint lumaIdx = uint(clamp((0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) * 255.0, 0.0, 255.0));
+
+    atomicAdd(rBins[rIdx], 1);
+    atomicAdd(gBins[gIdx], 1);
+    atomicAdd(bBins[bIdx], 1);
+    atomicAdd(lumaBins[lumaIdx], 1);
+}

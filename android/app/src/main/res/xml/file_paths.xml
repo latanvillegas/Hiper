@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cache directory for temporary edited photos returned to caller galleries -->
+    <cache-path
+        name="edited_cache"
+        path="edited_photos/" />
+
+    <!-- Root cache path for temporary scratchpads -->
+    <cache-path
+        name="temp_images"
+        path="." />
+
+    <!-- External cache for large high-res intermediate buffers -->
+    <external-cache-path
+        name="external_cache"
+        path="." />
+
+    <!-- Internal files directory for persistent user edits -->
+    <files-path
+        name="edited_files"
+        path="edited_photos/" />
+</paths>

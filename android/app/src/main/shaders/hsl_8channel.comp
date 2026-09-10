@@ -1,0 +1,104 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, rgba8) uniform readonly image2D uInputImage;
+layout(binding = 1, rgba8) uniform writeonly image2D uOutputImage;
+
+struct HslChannelAdj {
+    float hueShift;
+    float saturation;
+    float luminance;
+    float padding;
+};
+
+layout(std140, binding = 2) uniform HslUbo {
+    HslChannelAdj channels[8]; // R, Y, G, C, B, M, Shadows, Highlights
+};
+
+vec3 rgbToHsl(vec3 c) {
+    float maxC = max(c.r, max(c.g, c.b));
+    float minC = min(c.r, min(c.g, c.b));
+    float delta = maxC - minC;
+    float l = (maxC + minC) * 0.5;
+
+    float h = 0.0;
+    float s = 0.0;
+
+    if (delta > 0.00001) {
+        s = l <= 0.5 ? delta / (maxC + minC) : delta / (2.0 - maxC - minC);
+        if (maxC == c.r) {
+            h = mod((c.g - c.b) / delta, 6.0);
+        } else if (maxC == c.g) {
+            h = ((c.b - c.r) / delta) + 2.0;
+        } else {
+            h = ((c.r - c.g) / delta) + 4.0;
+        }
+        h *= 60.0;
+        if (h < 0.0) h += 360.0;
+    }
+    return vec3(h, s, l);
+}
+
+vec3 hslToRgb(vec3 hsl) {
+    float h = hsl.x;
+    float s = hsl.y;
+    float l = hsl.z;
+
+    float c = (1.0 - abs(2.0 * l - 1.0)) * s;
+    float x = c * (1.0 - abs(mod(h / 60.0, 2.0) - 1.0));
+    float m = l - c * 0.5;
+
+    vec3 rgbPrime;
+    int sector = int(h / 60.0);
+    if (sector == 0) rgbPrime = vec3(c, x, 0.0);
+    else if (sector == 1) rgbPrime = vec3(x, c, 0.0);
+    else if (sector == 2) rgbPrime = vec3(0.0, c, x);
+    else if (sector == 3) rgbPrime = vec3(0.0, x, c);
+    else if (sector == 4) rgbPrime = vec3(x, 0.0, c);
+    else rgbPrime = vec3(c, 0.0, x);
+
+    return clamp(rgbPrime + vec3(m), 0.0, 1.0);
+}
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uInputImage);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec4 color = imageLoad(uInputImage, coord);
+    vec3 hsl = rgbToHsl(color.rgb);
+
+    float totalHueShift = 0.0;
+    float totalSatMod = 0.0;
+    float totalLumMod = 0.0;
+
+    float centers[6] = float[6](0.0, 60.0, 120.0, 180.0, 240.0, 300.0);
+
+    for (int i = 0; i < 6; i++) {
+        float diff = abs(mod(hsl.x - centers[i] + 180.0, 360.0) - 180.0);
+        float weight = exp(-(diff * diff) / (2.0 * 25.0 * 25.0));
+
+        totalHueShift += channels[i].hueShift * weight;
+        totalSatMod += channels[i].saturation * weight;
+        totalLumMod += channels[i].luminance * weight;
+    }
+
+    // Shadows (Channel 6) & Highlights (Channel 7)
+    float shadowWeight = 1.0 - smoothstep(0.05, 0.45, hsl.z);
+    totalHueShift += channels[6].hueShift * shadowWeight;
+    totalSatMod += channels[6].saturation * shadowWeight;
+    totalLumMod += channels[6].luminance * shadowWeight;
+
+    float highlightWeight = smoothstep(0.55, 0.95, hsl.z);
+    totalHueShift += channels[7].hueShift * highlightWeight;
+    totalSatMod += channels[7].saturation * highlightWeight;
+    totalLumMod += channels[7].luminance * highlightWeight;
+
+    hsl.x = mod(hsl.x + totalHueShift, 360.0);
+    if (hsl.x < 0.0) hsl.x += 360.0;
+    hsl.y = clamp(hsl.y * (1.0 + totalSatMod), 0.0, 1.0);
+    hsl.z = clamp(hsl.z + totalLumMod * 0.5, 0.0, 1.0);
+
+    vec3 finalRgb = hslToRgb(hsl);
+    imageStore(uOutputImage, coord, vec4(finalRgb, color.a));
+}

@@ -1,0 +1,33 @@
+# Registro de Errores e Incidencias (KNOWN_ISSUES.md)
+
+## [2026-09-09] Error: SecurityException al devolver resultado a galerías de terceros (Samsung OneUI / Xiaomi)
+- **Síntoma**: Al presionar "Listo / Guardar", la galería llamadora (ej. Samsung Gallery o MIUI) no podía leer el URI devuelto y arrojaba `java.lang.SecurityException: Permission Denial: reading com.photoengine.core.fileprovider...`.
+- **Causa raíz**: El intent de resultado (`resultIntent`) solo tenía `FLAG_GRANT_READ_URI_PERMISSION` en flags del Intent, pero algunas versiones de Android requieren que el URI esté explícitamente en el `ClipData` del Intent para que el Binder IPC transfiera la concesión de permisos al proceso llamador.
+- **Solución aplicada**: Se configuró `resultIntent.clipData = ClipData.newUri(contentResolver, "PhotoEngine Edited Photo", exportResult.contentUri)` en `GalleryIntegrationManager.buildResultIntent`, además de los flags de intent `FLAG_GRANT_READ_URI_PERMISSION` y `FLAG_GRANT_WRITE_URI_PERMISSION`.
+- **Prevención**: En cualquier devolución de `setResult(RESULT_OK)` con `content://` provisto por `FileProvider`, adjuntar siempre el URI tanto en `intent.data` como en `intent.clipData`.
+
+## [2026-09-09] Error: Deprecación de RenderScript en Android 12+ (API 31+)
+- **Síntoma**: Advertencia de compilación `RenderScript is deprecated` y potenciales problemas de driver en dispositivos con Android 12 o superior.
+- **Causa raíz**: Google deprecó RenderScript en favor de Vulkan y NDK Compute.
+- **Solución aplicada**: Se implementó una arquitectura con Vulkan Compute como driver primario (`VulkanComputePipeline.kt`), relegando RenderScript solo a fallback condicional para dispositivos con Android 10 o inferior mediante un wrapper seguro (`RenderScriptFallback.kt`).
+- **Prevención**: Enrutamiento dinámico en tiempo de arranque verificando disponibilidad de Vulkan (`VkPhysicalDeviceFeatures`) antes de instanciar el contexto.
+
+## [2026-09-09] Error: Sobrepaso en Splines Cúbicos Naturales al manipular puntos extremos
+- **Síntoma**: Con puntos de control muy cercanos o pendientes extremas, la curva cúbica tradicional sobrepasaba [0, 1] o creaba curvaturas no monótonas en las curvas de tono.
+- **Causa raíz**: Un spline cúbico libre (Natural Cubic Spline) no garantiza monotonicidad si los puntos de entrada son monótonos crecientes.
+- **Solución aplicada**: Algoritmo de Spline Cúbico de Fritsch-Carlson (Monotone Cubic Hermite Spline) en `CubicSplineInterpolator.kt` con cálculo de tangentes limitadas y clamp estricto [0.0, 1.0].
+- **Prevención**: Validación matemática de los 14 puntos de control ordenados por coordenada X ascendente con tolerancia mínima $\Delta x \ge 0.001$.
+
+## [2026-09-09] Error: Shader compile error: S0032: no default precision defined for variable 'vec2[8]'
+- **Síntoma**: Al inicializar el contexto WebGL2 en el navegador se producía un fallo de compilación del fragment shader con mensaje `0:261: S0032: no default precision defined for variable 'vec2[8]'`.
+- **Causa raíz**: En la especificación GLSL ES 3.00, no existe precisión predeterminada para tipos enteros (`int`) en fragment shaders, y los constructores explícitos de arrays en línea (`vec2[8](...)` y `float[6](...)`) carecen de precisión calificada en varios compiladores GPU/drivers (como ANGLE/SwiftShader).
+- **Solución aplicada**: Se añadió la directiva `precision highp int;` junto a `precision highp float;` tanto en vertex como en fragment shader, y se refactorizaron las operaciones: muestreo bilateral desenrollado sin arrays (`SAMPLE_BILATERAL_TAP`) y cálculo directo del ángulo de tono (`float(i) * 60.0`) para el clasificador HSL de 8 canales.
+- **Prevención**: Evitar constructores de arrays anónimos de tamaño variable en el cuerpo de funciones en GLSL ES 3.00; asegurar directivas explícitas de precisión para `float` e `int` en todos los shaders de fragmentos.
+
+## [2026-09-09] Error: Rollup export mismatch y TypeScript strict checks en FaceRetouchPanel
+- **Síntoma**: Fallo de build en Vite `LIPSTICK_COLLECTIONS / BLUSH_PALETTES is not exported by beautyPresets.ts` y errores de TypeScript en tipos opcionales de belleza (`tanIntensity`, `catchlight`, `fullBodySmoothing`).
+- **Causa raíz**: Inconsistencia en la nomenclatura de exportación entre el catálogo cosmético (`BLUSH_PALETTE`, `LIPSTICK_PALETTES`, `HIGHLIGHTER_PALETTE`) y el panel de retoque, sumado a discrepancias entre nombres de campos en la interfaz `FaceRetouchSettings` (`catchlightIntensity`, `skinToneUniformity`) y `BeautyExtraSettings` (`smoothSkinBody`).
+- **Solución aplicada**: Se exportaron alias canónicos en `beautyPresets.ts` (`BLUSH_PALETTES`, `LIPSTICK_COLLECTIONS`, `HIGHLIGHTER_PALETTES`), se definieron constantes estructuradas completas (`DEFAULT_FACE_RETOUCH`, `DEFAULT_VIRTUAL_MAKEUP`, `DEFAULT_BEAUTY_EXTRA`), y se unificaron los nombres de propiedades en `FaceRetouchPanel.tsx` y `webglEngine.ts`.
+- **Prevención**: Mantener las fuentes de constantes predeterminadas asociadas a las interfaces de `types.ts` en un único módulo fuente centralizado y ejecutar `tsc --noEmit` y `vite build` en cada ciclo de iteración.
+
+
