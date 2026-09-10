@@ -1,0 +1,47 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, rgba8) uniform readonly image2D uInputImage;
+layout(binding = 1, rgba8) uniform writeonly image2D uOutputImage;
+layout(binding = 2) uniform sampler2D uSamplerImage;
+
+struct WarpVector {
+    vec2 center;
+    float radius;
+    float intensity;
+    vec2 direction;
+    vec2 padding;
+};
+
+layout(std140, binding = 3) uniform WarpUbo {
+    int vectorCount;
+    vec3 uboPadding;
+    WarpVector vectors[32];
+};
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uInputImage);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec2 uv = vec2(coord) / vec2(size);
+    vec2 pixelPos = vec2(coord);
+
+    vec2 totalDisplacement = vec2(0.0);
+
+    for (int i = 0; i < vectorCount; i++) {
+        vec2 delta = pixelPos - vectors[i].center;
+        float distSq = dot(delta, delta);
+        float rSq = vectors[i].radius * vectors[i].radius;
+
+        if (distSq < rSq) {
+            float factor = (1.0 - distSq / rSq);
+            float weight = factor * factor * vectors[i].intensity;
+            totalDisplacement += vectors[i].direction * weight;
+        }
+    }
+
+    vec2 warpedUv = (pixelPos - totalDisplacement) / vec2(size);
+    vec4 sampled = texture(uSamplerImage, warpedUv);
+    imageStore(uOutputImage, coord, sampled);
+}

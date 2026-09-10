@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.photoengine.core"
     compileSdk = 34
+    ndkVersion = "26.3.11579264"
 
     defaultConfig {
         applicationId = "com.photoengine.core"
@@ -18,11 +19,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-    }
 
-    sourceSets {
-        getByName("main") {
-            shaders.setSrcDirs(emptyList<String>())
+        ndk {
+            abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a", "x86_64"))
         }
     }
 
@@ -127,10 +126,5 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-}
-
-// Ensure shader compilation tasks are explicitly disabled (no NDK required)
-tasks.matching { it.name.contains("Shader") }.configureEach {
-    enabled = false
 }
 

@@ -1,5 +1,14 @@
 # Registro de Decisiones Técnicas (DECISIONS.md)
 
+## [2026-09-09] Decisión 12: Alineación Exacta de Android NDK y Toolchain en Gradle y GitHub Actions
+- **Contexto**: Para compilar los compute shaders de Vulkan/OpenGL en la tarea `:app:compileDebugShaders`, AGP requiere un compilador de shaders nativo (`glslc`) provisto por Android NDK. Se debe garantizar paridad determinista de versión entre el código de compilación local y el runner de CI en GitHub Actions.
+- **Decisión**:
+  1. Fijar explícitamente `ndkVersion = "26.3.11579264"` (NDK r26d LTS) en `android/app/build.gradle.kts`, versión canónica por defecto para Android Gradle Plugin 8.5.2.
+  2. En el workflow de CI `.github/workflows/android-build.yml`, configurar Android SDK mediante `android-actions/setup-android@v3`, aceptar automáticamente todas las licencias del SDK e instalar la versión idéntica `ndk;26.3.11579264` y `cmake;3.22.1` mediante `sdkmanager`.
+  3. Exportar variables de entorno `ANDROID_NDK_HOME` y `ANDROID_NDK_ROOT` apuntando a dicho directorio.
+  4. Incorporar pasos diagnósticos con listados de archivos del proyecto y directorios NDK de `$ANDROID_HOME` ante cualquier fallo.
+- **Consecuencia**: Eliminación total de discrepancias de NDK, ejecución exitosa de `:app:compileDebugShaders` y generación consistente de `app/build/outputs/apk/debug/app-debug.apk`.
+
 ## [2026-09-09] Decisión 11: Estandarización de Infraestructura Gradle Android para Compilación Real en CI/CD
 - **Contexto**: El repositorio contenía lógica Kotlin de alta fidelidad pero carecía de la envoltura estándar de Gradle (gradlew, gradle-wrapper.jar, gradle.properties), lo que impedía que GitHub Actions o un desarrollador compilaran `app-debug.apk` y `app-release.apk`.
 - **Decisión**:

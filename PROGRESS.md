@@ -1,3 +1,20 @@
+## [2026-09-09] Funcionalidad: Integración y Configuración Explícita de Android NDK y CMake en CI/CD
+Estado: Completo y probado
+Descripción: Actualización del pipeline .github/workflows/android-build.yml y build.gradle.kts para compilar :app:compileDebugShaders con toolchain nativo NDK:
+- Fijación estricta de `ndkVersion = "26.3.11579264"` en `android/app/build.gradle.kts`, 100% compatible con AGP 8.5.2 y compilación de shaders SPIR-V / Vulkan.
+- Configuración de Android SDK en GitHub Actions con `android-actions/setup-android@v3`.
+- Aceptación automática de licencias de Android SDK (`yes | sdkmanager --licenses`).
+- Instalación de la versión exacta de NDK `26.3.11579264` y CMake `3.22.1` mediante `sdkmanager`.
+- Configuración de variables de entorno `ANDROID_NDK_HOME` y `ANDROID_NDK_ROOT`.
+- Reintegración de shaders de cómputo en `android/app/src/main/shaders` y reactivación de tareas de compilación.
+- Búsqueda y verificación de APK en `app/build/outputs/apk/debug/app-debug.apk` con subida a artefactos mediante `actions/upload-artifact@v4`.
+- Diagnóstico automático en caso de fallo listando estructura de archivos del repo y directorios NDK de `$ANDROID_HOME`.
+Archivos involucrados:
+- .github/workflows/android-build.yml
+- android/app/build.gradle.kts
+- DECISIONS.md
+- PROGRESS.md
+
 ## [2026-09-09] Funcionalidad: Desactivación de NDK y Shaders para Compilación Exitosa de APK en CI/CD
 Estado: Completo y probado
 Descripción: Corrección integral del proyecto para eliminar el fallo 'Execution failed for task :app:compileDebugShaders - NDK is not installed':

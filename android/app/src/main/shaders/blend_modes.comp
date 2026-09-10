@@ -1,0 +1,58 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, rgba8) uniform readonly image2D uBaseImage;
+layout(binding = 1, rgba8) uniform readonly image2D uBlendImage;
+layout(binding = 2, rgba8) uniform writeonly image2D uOutputImage;
+
+layout(push_constant) uniform BlendParams {
+    int mode; // 0=Normal, 1=Multiply, 2=Screen, 3=Overlay, 4=SoftLight, 5=HardLight, 6=ColorDodge, 7=ColorBurn, etc.
+    float opacity;
+} params;
+
+vec3 blendOverlay(vec3 base, vec3 blend) {
+    return mix(2.0 * base * blend, 1.0 - 2.0 * (1.0 - base) * (1.0 - blend), step(0.5, base));
+}
+
+vec3 blendSoftLight(vec3 base, vec3 blend) {
+    vec3 d = mix(sqrt(base), ((16.0 * base - 12.0) * base + 4.0) * base, step(base, vec3(0.25)));
+    return mix(base - (1.0 - 2.0 * blend) * base * (1.0 - base), base + (2.0 * blend - 1.0) * (d - base), step(0.5, blend));
+}
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uBaseImage);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec4 base = imageLoad(uBaseImage, coord);
+    vec4 blend = imageLoad(uBlendImage, coord);
+
+    vec3 res = blend.rgb;
+
+    if (params.mode == 0) {
+        res = blend.rgb; // Normal
+    } else if (params.mode == 1) {
+        res = base.rgb * blend.rgb; // Multiply
+    } else if (params.mode == 2) {
+        res = 1.0 - (1.0 - base.rgb) * (1.0 - blend.rgb); // Screen
+    } else if (params.mode == 3) {
+        res = blendOverlay(base.rgb, blend.rgb); // Overlay
+    } else if (params.mode == 4) {
+        res = blendSoftLight(base.rgb, blend.rgb); // Soft Light
+    } else if (params.mode == 5) {
+        res = mix(2.0 * base.rgb * blend.rgb, 1.0 - 2.0 * (1.0 - base.rgb) * (1.0 - blend.rgb), step(0.5, blend.rgb)); // Hard Light
+    } else if (params.mode == 6) {
+        res = min(vec3(1.0), base.rgb / max(vec3(0.001), 1.0 - blend.rgb)); // Color Dodge
+    } else if (params.mode == 7) {
+        res = 1.0 - min(vec3(1.0), (1.0 - base.rgb) / max(vec3(0.001), blend.rgb)); // Color Burn
+    } else if (params.mode == 8) {
+        res = abs(base.rgb - blend.rgb); // Difference
+    } else if (params.mode == 9) {
+        res = base.rgb + blend.rgb - 2.0 * base.rgb * blend.rgb; // Exclusion
+    } else if (params.mode == 14) {
+        res = min(vec3(1.0), base.rgb + blend.rgb); // Linear Dodge (Add)
+    }
+
+    vec3 blended = mix(base.rgb, res, params.opacity * blend.a);
+    imageStore(uOutputImage, coord, vec4(blended, base.a));
+}

@@ -1,0 +1,36 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, rgba8) uniform readonly image2D uInputImage;
+layout(binding = 1, rgba8) uniform writeonly image2D uOutputImage;
+
+layout(push_constant) uniform GrainParams {
+    float amount;
+    float size;
+    float roughness;
+    float seed;
+} params;
+
+float hash(vec2 p, float s) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33 + s);
+    return fract((p3.x + p3.y) * p3.z) * 2.0 - 1.0;
+}
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uInputImage);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec4 color = imageLoad(uInputImage, coord);
+    float luma = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+
+    // Film grain distribution (natural bell curve peaked at midtones, fading in deep blacks and bright whites)
+    float midtoneWeight = clamp(1.0 - abs(luma - 0.5) * 2.0, 0.1, 1.0);
+
+    vec2 grainCoord = vec2(coord) / max(params.size, 1.0);
+    float noise = hash(grainCoord, params.seed);
+
+    vec3 grained = color.rgb + vec3(noise * params.amount * midtoneWeight);
+    imageStore(uOutputImage, coord, vec4(clamp(grained, 0.0, 1.0), color.a));
+}
